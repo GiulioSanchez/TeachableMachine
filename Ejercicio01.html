@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reconocimiento imágenes</title>
+
+  <!-- Incluyo p5.js para trabajar con imágenes y gráficos de manera fácil -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  
+  <!-- Esta librería ml5.js es super útil para hacer IA sin complicarse mucho -->
+  <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
+
+  <style>
+    /* Estos son los estilos generales de la página - traté de hacerla bonita :) */
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; /* Me gusta esta fuente moderna */
+      background-color: #f5f7fa; /* Un fondo claro pero no tan básico como el blanco */
+      display: flex;
+      flex-direction: column;
+      align-items: center;  
+      justify-content: center;
+      min-height: 100vh; /* Para que ocupe toda la pantalla */
+      margin: 0;
+      padding: 20px;
+    }
+
+    /* Contenedor de las miniaturas - le di un aspecto de tarjeta */
+    .thumbnails {
+      display: flex;
+      justify-content: center;
+      gap: 20px; /* Espacio entre miniaturas, antes usaba margin pero gap es más moderno */
+      margin-top: 30px;
+      padding: 15px;
+      background: white;
+      border-radius: 16px; /* Bordes redondeados para que se vea más moderno */
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); /* Sombra sutil */
+    }
+
+    /* Cada miniatura individual */
+    .thumbnail {
+      position: relative;
+      cursor: pointer; /* Para que se note que es clickeable */
+    }
+
+    /* Estilos de las imágenes miniatura */
+    .thumbnail img {
+      width: 120px;
+      height: 120px;
+      object-fit: cover; /* Para que las imágenes no se deformen */
+      border: 3px solid #e2e8f0;
+      border-radius: 12px;
+      transition: all 0.3s ease; /* Para la animación al pasar el mouse */
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Efecto hover para las miniaturas - me quedó chulo! */
+    .thumbnail img:hover {
+      transform: translateY(-5px); /* Se eleva un poquito */
+      border-color: #3b82f6; /* Cambia a azul */
+      box-shadow: 0 6px 12px rgba(59, 130, 246, 0.2); /* Sombra azulada */
+    }
+
+    /* Contenedor de la imagen grande */
+    #largeImageContainer {
+      margin-top: 30px;
+      padding: 10px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    /* La imagen principal */
+    #largeImage {
+      max-width: 600px;
+      max-height: 400px;
+      border-radius: 12px;
+      display: block;
+      object-fit: cover; /* Aprendí que esto evita que se deforme la imagen */
+    }
+
+    /* Caja donde aparece la descripción del animal */
+    #description {
+      margin-top: 20px;
+      padding: 15px 25px;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      width: 80%;
+      text-align: center;
+      font-size: 1.1rem;
+      color: #1e293b;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    /* La barra de confianza completa */
+    #confidence-bar {
+      width: 80%;
+      height: 24px;
+      margin-top: 20px;
+      border-radius: 12px;
+      background-color: #e2e8f0; /* Color base gris claro */
+      position: relative;
+      overflow: hidden; /* Para que el nivel no se salga */
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05); /* Sombra interna, se ve genial */
+    }
+
+    /* La parte que se llena según la confianza - le puse un gradiente que se ve moderno */
+    #confidence-level {
+      height: 100%;
+      border-radius: 12px;
+      background: linear-gradient(90deg, #4ade80, #3b82f6); /* Gradiente de verde a azul */
+      transition: width 0.3s ease; /* Para que se anime suavemente */
+    }
+
+    /* El texto dentro de la barra */
+    #confidence-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%); 
+      color: white;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); 
+      white-space: nowrap; 
+    }
+
+    /* El canvas de p5.js lo oculto porque solo lo uso para procesar, no para mostrar */
+    canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sección de miniaturas - se pueden agregar más si queremos -->
+  <div class="thumbnails">
+    <div class="thumbnail" onclick="changeImage('animal-01.jpg')">
+      <img src="images/animal-01.jpg" alt="Animal 1">
+    </div>
+    <div class="thumbnail" onclick="changeImage('animal-02.jpg')">
+      <img src="images/animal-02.jpg" alt="Animal 2">
+    </div>
+    <div class="thumbnail" onclick="changeImage('animal-03.jpg')">
+      <img src="images/animal-03.jpg" alt="Animal 3">
+    </div>
+  </div>
+
+  <!-- Contenedor para la imagen grande -->
+  <div id="largeImageContainer">
+    <img id="largeImage" src="images/animal-01.jpg" alt="Animal Image">
+  </div>
+
+  <!-- Aquí se mostrará qué animal detectó -->
+  <div id="description">Selecciona una imagen para ver la descripción</div>
+
+  <!-- Barra que muestra la confianza de la predicción -->
+  <div id="confidence-bar">
+    <div id="confidence-level" style="width: 0%;">
+      <span id="confidence-text">Confianza: 0%</span>
+    </div>
+  </div>
+
+  <script>
+    // Variables globales que voy a necesitar
+    let classifier; // Aquí guardaré el modelo de clasificación
+    let img; // Para manipular la imagen actual
+    let etiqueta = ""; // La predicción (qué animal es)
+    let confianza = 0.0; // Qué tan seguro está el modelo (de 0 a 100)
+    let currentImage = "animal-01.jpg"; // La imagen que estamos mostrando
+
+    // Esta función se ejecuta antes que todo lo demás
+    // Es como cargar todo lo que necesitamos antes de empezar
+    function preload(){
+      // Cargo el modelo MobileNet que ya viene entrenado para reconocer muchas cosas
+      // ¡Es impresionante que esto funcione directamente en el navegador!
+      classifier = ml5.imageClassifier("MobileNet");
+      
+      // Cargo la primera imagen
+      loadImage(currentImage);
+    }
+
+    // Esta función configura todo lo inicial
+    function setup(){
+      // Creo un canvas de p5.js - lo uso para procesar imágenes
+      // aunque lo tengo oculto con CSS porque no necesito mostrarlo
+      createCanvas(600, 400);
+      
+      // Analizo la primera imagen al cargar
+      classifyImage(currentImage);
+    }
+
+    // Esta función se ejecuta cuando hacemos clic en una miniatura
+    function changeImage(imageName) {
+      // Actualizo la imagen actual
+      currentImage = imageName;
+      
+      // Cambio la imagen grande por la nueva
+      document.getElementById("largeImage").src = `images/${imageName}`;
+      
+      // La analizo con el modelo
+      classifyImage(imageName);
+    }
+
+    // Esta función carga y clasifica la imagen seleccionada
+    function classifyImage(imageName) {
+      // Cargo la imagen usando p5.js - es más fácil para procesarla
+      img = loadImage(`images/${imageName}`, () => {
+        // Una vez cargada, la clasifico con el modelo
+        // El segundo parámetro es un callback que recibe los resultados
+        classifier.classify(img, gotResult);
+      });
+    }
+
+    // Esta función procesa los resultados de la clasificación
+    function gotResult(results) {
+      // Muestro los resultados en la consola para poder debuggear
+      console.log(results);
+
+      // Saco el porcentaje de confianza (venía en decimal y lo paso a porcentaje)
+      const porcentaje = (results[0].confidence * 100).toFixed(2);
+      
+      // Formateo el texto con la predicción
+      etiqueta = "Animal: " + results[0].label;
+      confianza = porcentaje;
+
+      // Actualizo el texto de descripción
+      document.getElementById("description").innerText = `${etiqueta}`;
+      
+      // Actualizo la barra de confianza
+      document.getElementById("confidence-text").innerText = `Confianza: ${confianza}%`;
+      document.getElementById("confidence-level").style.width = `${confianza}%`;
+
+      // Dibujo la imagen en el canvas (aunque esté oculto)
+      image(img, 0, 0, width, height);
+    }
+
+    // Inicializo todo cuando la página termina de cargar
+    window.onload = function() {
+      preload();
+      setup();
+    }
+
+  </script>
+</body>
+</html>
